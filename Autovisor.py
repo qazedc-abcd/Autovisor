@@ -13,6 +13,7 @@ from playwright._impl._errors import TargetClosedError
 from modules import installer, updater
 from modules.banner import print_banner
 from modules.configs import Config, ConfigError
+from modules.console_io import configure_utf8_output
 from modules.course_activities import run_course_activities
 from modules.course_runner import (
     CourseOutcome,
@@ -399,6 +400,7 @@ def parse_args():
 
 def cli() -> int:
     global logger
+    configure_utf8_output()
     args = parse_args()
     print_banner()
     logger = Logger()

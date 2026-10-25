@@ -22,10 +22,10 @@ STYLE = """
 QWidget {font-family:"Microsoft YaHei UI","Segoe UI";font-size:14px;color:#20372b;}
 QMainWindow,QWidget#shell {background:#f5f8f3;}
 QFrame#rail {background:#eaf1e8;border-radius:26px;}
-QLabel#brand {font-size:26px;font-weight:700;}
+QLabel#brand {font-size:22px;font-weight:700;}
 QLabel#mark {color:white;background:#245d43;border-radius:19px;font-size:22px;font-weight:700;}
 QLabel#eyebrow {color:#526859;font-size:12px;font-weight:600;}
-QLabel#display {font-size:33px;font-weight:650;}
+QLabel#display {font-size:26px;font-weight:650;}
 QLabel#section {font-size:19px;font-weight:600;}
 QLabel#muted {color:#65756a;}
 QLabel#status {background:#ddebdc;color:#2b583d;border-radius:15px;padding:7px 14px;}
@@ -42,9 +42,6 @@ QPushButton#primary:disabled {background:#afc2b0;}
 QPushButton#stop {background:#ffdad6;color:#8b302b;}
 QPushButton#nav {background:transparent;text-align:left;border-radius:23px;padding:15px 19px;font-weight:500;}
 QPushButton#nav:checked {background:#cce8c9;color:#183c26;font-weight:650;}
-QPushButton#mode {background:white;color:#4b6252;border:1px solid #d9e4d6;border-radius:24px;text-align:left;padding:23px;font-size:17px;}
-QPushButton#mode:checked {background:#d4edcf;color:#183e25;border:2px solid #477a4b;}
-QPushButton#mode:hover {background:#e6f1e0;}
 QLineEdit,QPlainTextEdit,QComboBox,QSpinBox,QDoubleSpinBox {background:#f3f6f0;border:1px solid #d5dfd0;border-radius:12px;padding:11px 13px;selection-background-color:#c4e6bf;}
 QLineEdit:focus,QPlainTextEdit:focus,QComboBox:focus,QSpinBox:focus,QDoubleSpinBox:focus {border:2px solid #477a4b;}
 QComboBox::drop-down {border:0;width:30px;}
@@ -95,28 +92,29 @@ class MainWindow(QMainWindow):
         self.stopping = False
         self.setWindowTitle('Autovisor · 课程助手')
         self.setWindowIcon(QIcon(str(self.root / 'resources' / 'zhs.ico')))
-        self.resize(1200, 810)
-        self.setMinimumSize(1000, 680)
+        available = QApplication.primaryScreen().availableGeometry()
+        self.setMinimumSize(min(760, available.width()), min(480, available.height()))
+        self.resize(min(1080, int(available.width() * 0.9)), min(760, int(available.height() * 0.86)))
         self.setStyleSheet(STYLE)
         shell = QWidget()
         shell.setObjectName('shell')
         outer = QHBoxLayout(shell)
-        outer.setContentsMargins(18, 18, 26, 18)
-        outer.setSpacing(30)
+        outer.setContentsMargins(14, 14, 18, 14)
+        outer.setSpacing(18)
         self.setCentralWidget(shell)
         rail = QFrame()
         rail.setObjectName('rail')
-        rail.setFixedWidth(210)
+        rail.setFixedWidth(176)
         rail_layout = QVBoxLayout(rail)
-        rail_layout.setContentsMargins(19, 27, 19, 23)
+        rail_layout.setContentsMargins(14, 20, 14, 18)
         mark = label('A', 'mark')
         mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
         mark.setFixedSize(46, 46)
         rail_layout.addWidget(mark)
         rail_layout.addSpacing(16)
         rail_layout.addWidget(label('Autovisor', 'brand'))
-        rail_layout.addWidget(label('把课程安排得更清楚', 'muted'))
-        rail_layout.addSpacing(35)
+        rail_layout.addWidget(label('把课程安排得更清楚', 'muted', True))
+        rail_layout.addSpacing(20)
         self.stack = QStackedWidget()
         self.navigation = []
         for index, title in enumerate(['任务概览', '课程与账号', 'AI 设置', '运行记录']):
@@ -131,7 +129,7 @@ class MainWindow(QMainWindow):
         rail_layout.addWidget(label(f'桌面版 {__version__} · MD3', 'eyebrow'))
         outer.addWidget(rail)
         content = QVBoxLayout()
-        content.setSpacing(18)
+        content.setSpacing(12)
         header = QHBoxLayout()
         heading = QVBoxLayout()
         heading.addWidget(label('YOUR LEARNING SPACE', 'eyebrow'))
@@ -141,6 +139,18 @@ class MainWindow(QMainWindow):
         self.status = label('准备就绪', 'status')
         header.addWidget(self.status, alignment=Qt.AlignmentFlag.AlignTop)
         content.addLayout(header)
+        switches = QHBoxLayout()
+        switches.addWidget(label('功能开关', 'eyebrow'))
+        self.modes = {}
+        for section, title in [('video', '开启刷课'), ('qa', '开启互动'), ('homework', '开启作业')]:
+            checkbox = QCheckBox(title)
+            checkbox.setAccessibleName(title)
+            checkbox.setChecked(self.settings.enabled(section, default=section == 'video'))
+            checkbox.toggled.connect(self.update_summary)
+            self.modes[section] = checkbox
+            switches.addWidget(checkbox)
+        switches.addStretch()
+        content.addLayout(switches)
         content.addWidget(self.stack, 1)
         self.build_overview()
         self.build_courses()
@@ -148,10 +158,12 @@ class MainWindow(QMainWindow):
         self.build_logs()
         runbar = QFrame()
         runbar.setObjectName('runbar')
-        run_layout = QHBoxLayout(runbar)
-        run_layout.setContentsMargins(22, 15, 17, 15)
-        self.summary = label('', 'muted')
-        run_layout.addWidget(self.summary, 1)
+        run_layout = QVBoxLayout(runbar)
+        run_layout.setContentsMargins(16, 10, 14, 10)
+        self.summary = label('', 'muted', True)
+        run_layout.addWidget(self.summary)
+        actions = QHBoxLayout()
+        actions.addStretch()
         self.save_button = QPushButton('保存设置')
         self.save_button.clicked.connect(self.save)
         self.start_button = QPushButton('开始任务')
@@ -162,7 +174,8 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.stop)
         for button in (self.save_button, self.stop_button, self.start_button):
-            run_layout.addWidget(button)
+            actions.addWidget(button)
+        run_layout.addLayout(actions)
         content.addWidget(runbar)
         outer.addLayout(content, 1)
         self.navigate(0)
@@ -182,23 +195,15 @@ class MainWindow(QMainWindow):
 
     def build_overview(self):
         layout = self.scroll_page()
-        layout.addWidget(label('选择这一次要做什么', 'section'))
-        layout.addWidget(label('三个功能独立运行。可以只选一个，也可以组合。', 'muted'))
-        modes = QHBoxLayout()
-        self.modes = {}
+        layout.addWidget(label('用上方功能开关，选择这一次要做什么', 'section', True))
+        layout.addWidget(label('三个功能独立运行。可以只选一个，也可以组合；切换页面后开关仍在上方。', 'muted', True))
+        frame, inner = card('功能说明')
         for section, title, note in [
             ('video', '刷课', '继续学习课程视频'), ('qa', '课程互动', '先查分，再提问与回答'),
             ('homework', '作业答题', '只处理未提交的作业'),
         ]:
-            button = QPushButton(f'{title}\n\n{note}')
-            button.setObjectName('mode')
-            button.setMinimumHeight(146)
-            button.setCheckable(True)
-            button.setChecked(self.settings.enabled(section, default=section == 'video'))
-            button.toggled.connect(self.update_summary)
-            self.modes[section] = button
-            modes.addWidget(button, 1)
-        layout.addLayout(modes)
+            inner.addWidget(label(f'{title} · {note}', 'muted', True))
+        layout.addWidget(frame)
         layout.addWidget(label('放心掌握运行范围\n互动满分会跳过；作业与考试按类型区分，尚未开放的考试也不会进入。', 'notice', True))
         frame, inner = card('开始前，只需要三步')
         for title, note in [
@@ -249,6 +254,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(frame)
         frame, inner = card('登录与浏览器', '账号、密码可留空，开始后在浏览器中手动登录。密码与 API 密钥保存在本机 config.ini，请妥善保管。')
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setSpacing(13)
         self.field(form, '智慧树账号', 'user-account', 'username')
         self.field(form, '登录密码', 'user-account', 'password', secret=True)
@@ -262,6 +268,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(frame)
         frame, inner = card('视频播放', '每门课分别计时。填 0 表示不限时；播放速度范围为 0.5–1.8。')
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setSpacing(13)
         self.field(form, '每课时长 / 分钟', 'course-option', 'limitMaxTime', '30', number='decimal')
         self.field(form, '播放速度', 'course-option', 'limitSpeed', '1.0', number='decimal')
@@ -275,6 +282,7 @@ class MainWindow(QMainWindow):
         layout = self.scroll_page()
         frame, inner = card('连接你的 AI 服务', '支持 OpenAI 兼容接口。密钥由你自行填写，软件不提供共享密钥。')
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setSpacing(13)
         self.field(form, '服务地址', 'ai', 'base_url', 'https://api.deepseek.com')
         self.field(form, 'API 密钥', 'ai', 'api_key', secret=True)
@@ -285,6 +293,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(frame)
         frame, inner = card('课程互动', '先查实际得分，满分就跳过。得分通常次日更新；数量同时作为每课当天上限，填 0 可关闭对应能力。')
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setSpacing(13)
         self.field(form, '每课提问数量', 'qa', 'questions_per_run', '1', number='integer')
         self.field(form, '每课回答数量', 'qa', 'answers_per_run', '1', number='integer')
@@ -385,6 +394,8 @@ class MainWindow(QMainWindow):
         self.save_button.setEnabled(False)
         self.stop_button.setEnabled(True)
         self.status.setText('正在运行')
+        for checkbox in self.modes.values():
+            checkbox.setEnabled(False)
         self.process.start(program, arguments)
 
     def read_output(self):
@@ -405,6 +416,8 @@ class MainWindow(QMainWindow):
         self.start_button.setEnabled(True)
         self.save_button.setEnabled(True)
         self.stop_button.setEnabled(False)
+        for checkbox in self.modes.values():
+            checkbox.setEnabled(True)
         self.status.setText('已停止' if self.stopping else '任务完成' if exit_code == 0 else '有任务未完成')
 
     def process_error(self, error):

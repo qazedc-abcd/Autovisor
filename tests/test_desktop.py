@@ -87,3 +87,39 @@ class DesktopWindowTests(unittest.TestCase):
             with patch.object(window.process, 'start') as start, patch.object(QMessageBox, 'information'):
                 window.start()
             start.assert_not_called()
+
+    def test_mode_checkboxes_remain_visible_on_all_pages_in_small_window(self):
+        from PySide6.QtWidgets import QCheckBox
+        from modules.desktop_ui import MainWindow
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'config.ini'
+            shutil.copyfile('config.ini.example', path)
+            window = MainWindow(path)
+            self.addCleanup(window.close)
+            window.show()
+            for width, height in ((800, 560), (760, 480)):
+                window.resize(width, height)
+                for page in range(window.stack.count()):
+                    window.navigate(page)
+                    self.app.processEvents()
+                    self.assertLessEqual(window.width(), width)
+                    self.assertLessEqual(window.height(), height)
+                    for checkbox in window.modes.values():
+                        self.assertIsInstance(checkbox, QCheckBox)
+                        self.assertTrue(checkbox.isVisible())
+                        self.assertTrue(window.rect().contains(checkbox.mapTo(window, checkbox.rect().bottomRight())))
+                    self.assertTrue(window.rect().contains(window.start_button.mapTo(window, window.start_button.rect().bottomRight())))
+
+    def test_chinese_log_split_inside_utf8_character_is_rendered_correctly(self):
+        from modules.desktop_ui import MainWindow
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'config.ini'
+            shutil.copyfile('config.ini.example', path)
+            window = MainWindow(path)
+            self.addCleanup(window.close)
+            raw = '课程日志：正在学习，已保存答案。\n'.encode('utf-8')
+            pieces = [raw[:2], raw[2:7], raw[7:11], raw[11:]]
+            with patch.object(window.process, 'readAllStandardOutput', side_effect=pieces):
+                for _ in pieces:
+                    window.read_output()
+            self.assertEqual(window.console.toPlainText(), '课程日志：正在学习，已保存答案。\n')

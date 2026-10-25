@@ -81,6 +81,8 @@ def main():
     forbidden = {'cookies.json', 'activities.json', 'QRcode.jpg'}
     assert not any(p.name in forbidden for p in bundle.rglob('*'))
     assert not (bundle / 'logs').exists()
+    from scripts.smoke_windows import check_bundle
+    check_bundle(bundle)
     archive = shutil.make_archive(str(ROOT / 'dist' / f'Autovisor-{__version__}-windows-amd64'), 'zip', ROOT / 'dist', 'Autovisor')
     digest = hashlib.sha256(Path(archive).read_bytes()).hexdigest()
     (ROOT / 'dist' / 'SHA256SUMS.txt').write_text(f'{digest}  {Path(archive).name}\n', encoding='utf-8')
