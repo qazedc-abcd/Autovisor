@@ -8,6 +8,7 @@ from modules.installer import (
     DEFAULT_PACKAGES,
     build_wheel_url,
     install_package,
+    is_installed,
     is_compatible_wheel,
     runtime_packages,
     validate_python_version,
@@ -58,6 +59,42 @@ class InstallerTests(unittest.TestCase):
             "opencv_python-4.10.0.82-cp37-abi3-win_amd64.whl",
             "opencv-python", "4.10.0.82", "cp311", "cp311", "win_amd64",
         ))
+
+    def test_opencv_wheel_build_must_match_exactly(self):
+        self.assertFalse(is_compatible_wheel(
+            "opencv_python-4.10.0.82-cp37-abi3-win_amd64.whl",
+            "opencv-python", "4.10.0.84", "cp313", "cp313", "win_amd64",
+        ))
+        self.assertTrue(is_compatible_wheel(
+            "opencv_python-4.10.0.84-cp37-abi3-win_amd64.whl",
+            "opencv-python", "4.10.0.84", "cp313", "cp313", "win_amd64",
+        ))
+
+    def test_wrong_opencv_build_is_not_imported_before_replacement(self):
+        with patch('modules.installer.distribution_version', return_value='4.10.0.82'), \
+                patch('modules.installer.import_module') as import_module:
+            self.assertEqual(is_installed('opencv-python', '4.10.0.84'), (None, False))
+        import_module.assert_not_called()
+
+    def test_cv2_module_version_does_not_include_wheel_build(self):
+        with patch('modules.installer.distribution_version', return_value='4.10.0.84'), \
+                patch('modules.installer.import_module', return_value=SimpleNamespace(__version__='4.10.0')):
+            self.assertTrue(is_installed('opencv-python', '4.10.0.84')[1])
+
+    def test_locked_native_library_stops_without_trying_other_mirrors(self):
+        with patch('modules.installer.download_wheel', return_value='opencv.whl') as download, \
+                patch('modules.installer.clear_package_files', side_effect=PermissionError('cv2.pyd locked')):
+            with self.assertRaisesRegex(RuntimeError, '关闭旧的 Autovisor'):
+                install_package('opencv-python', '4.10.0.84', [('one', 'https://one'), ('two', 'https://two')])
+        self.assertEqual(download.call_count, 1)
+
+    def test_native_import_failure_does_not_retry_install_in_same_process(self):
+        with patch('modules.installer.download_wheel', return_value='opencv.whl') as download, \
+                patch('modules.installer.clear_package_files'), patch('modules.installer.extract_whl'), \
+                patch('modules.installer.import_module', side_effect=ImportError('numpy.core.multiarray failed')):
+            with self.assertRaisesRegex(RuntimeError, '安装后导入失败'):
+                install_package('opencv-python', '4.10.0.84', [('one', 'https://one'), ('two', 'https://two')])
+        self.assertEqual(download.call_count, 1)
 
     def test_rejects_free_threaded_wheel(self):
         self.assertTrue(is_compatible_wheel(

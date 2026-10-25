@@ -13,6 +13,7 @@ from playwright._impl._errors import TargetClosedError
 from modules import installer, updater
 from modules.banner import print_banner
 from modules.configs import Config, ConfigError
+from modules.course_activities import run_course_activities
 from modules.course_runner import (
     CourseOutcome,
     detect_catalog_after_verification,
@@ -29,7 +30,6 @@ from modules.login import (
 )
 from modules.logger import Logger
 from modules.slider import slider_verify
-from modules.support import show_donate
 from modules.tasks import (
     play_video,
     skip_questions,
@@ -233,6 +233,9 @@ async def ensure_login(
 
 
 async def main(config) -> bool:
+    if not (config.video_enabled or config.qa_enabled or config.homework_enabled):
+        logger.info('刷课、互动和作业均已关闭，本轮没有需要执行的任务。')
+        return True
     modules, tasks = [], []
     playback_enabled = asyncio.Event()
     all_courses_complete = True
@@ -254,28 +257,37 @@ async def main(config) -> bool:
             login_by_cookie = await ensure_login(context, page, cookies, config, modules)
 
             logger.context(登录方式="Cookie" if login_by_cookie else "账号")
-            tasks.extend(
-                [
-                    asyncio.create_task(
-                        wait_for_verify(page, config, event_loop_verify)
-                    ),
-                    asyncio.create_task(video_optimize(page, config)),
-                    asyncio.create_task(skip_questions(page, event_loop_answer)),
-                    asyncio.create_task(play_video(page, playback_enabled)),
-                ]
-            )
-            logger.event(
-                "后台任务启动",
-                任务=", ".join(task.get_coro().__name__ for task in tasks),
-            )
+            if config.video_enabled:
+                tasks.extend(
+                    [
+                        asyncio.create_task(
+                            wait_for_verify(page, config, event_loop_verify)
+                        ),
+                        asyncio.create_task(video_optimize(page, config)),
+                        asyncio.create_task(skip_questions(page, event_loop_answer)),
+                        asyncio.create_task(play_video(page, playback_enabled)),
+                    ]
+                )
+                logger.event(
+                    "后台任务启动",
+                    任务=", ".join(task.get_coro().__name__ for task in tasks),
+                )
             if config.enableHideWindow:
                 await hide_window(page)
-            monitor_task = asyncio.create_task(task_monitor(tasks))
+            if tasks:
+                monitor_task = asyncio.create_task(task_monitor(tasks))
 
             course_total = len(config.course_urls)
             for index, course_url in enumerate(config.course_urls, 1):
                 logger.section(f"课程 {index}/{course_total}")
                 logger.context(课程序号=f"{index}/{course_total}", 课程地址=course_url)
+                if not config.video_enabled:
+                    logger.info('刷课已关闭，仅运行所选互动/作业，不打开视频播放页。')
+                    if await run_course_activities(page, config, logger, course_url=course_url) is False:
+                        run_ok = False
+                        all_courses_complete = False
+                    await persist_login_cookies(context)
+                    continue
                 logger.info("正在加载播放页...")
                 await page.goto(course_url, wait_until="commit")
                 await page.wait_for_timeout(1500)
@@ -292,6 +304,10 @@ async def main(config) -> bool:
                     await page.goto(course_url, wait_until="commit")
                     await page.wait_for_timeout(1500)
 
+                playback_enabled.clear()
+                if await run_course_activities(page, config, logger) is False:
+                    run_ok = False
+                    all_courses_complete = False
                 catalog = await detect_catalog_after_verification(page, page.url)
                 logger.info(f"检测到 {catalog.name} 课程目录.")
                 logger.context(目录类型=catalog.name)
@@ -332,6 +348,8 @@ async def main(config) -> bool:
                 await asyncio.gather(monitor_task, return_exceptions=True)
             try:
                 await persist_login_cookies(context)
+            except TargetClosedError:
+                logger.debug('浏览器已关闭，跳过退出时登录凭证刷新。')
             except Exception as exc:
                 logger.log_exception("刷新登录 Cookies 失败.", exc)
             try:
@@ -347,13 +365,14 @@ async def main(config) -> bool:
     )
     logger.clear_context()
     if not run_ok:
-        logger.warn("本轮因课时进度未确认而停止.", shift=True)
+        logger.warn("本轮有任务未确认完成，请检查上述错误日志。", shift=True)
         return False
-    if all_courses_complete:
+    if not config.video_enabled:
+        logger.info('本轮所选互动/作业活动已执行完毕，结果请查看各项日志。')
+    elif all_courses_complete:
         logger.info("所有课程已学习完毕!")
     else:
         logger.info("本轮已按每门课程时限结束,仍有课程未完成.", shift=True)
-    show_donate(get_runtime_path("resources", "QRcode.jpg"), show=config.showDonateCode)
     return True
 
 
@@ -402,8 +421,7 @@ def cli() -> int:
         installer.validate_python_version()
         base_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
         config_path = args.config or os.path.join(base_dir, "config.ini")
-        mirrors_path = os.path.join(base_dir, "data", "mirrors.json")
-        config = Config(config_path, mirrors_path)
+        config = Config(config_path)
         logger.context(配置文件=config_path)
         logger.event(
             "运行配置",
@@ -412,7 +430,10 @@ def cli() -> int:
             连接现有浏览器=config.attach_existing_chrome,
             账号="已填写" if config.username else "未填写",
             密码="已填写" if config.password else "未填写",
-            自动答题=config.enableAutoCaptcha,
+            自动滑块=config.enableAutoCaptcha,
+            刷课=config.video_enabled,
+            互动=config.qa_enabled,
+            作业=config.homework_enabled,
             隐藏窗口=config.enableHideWindow,
             静音=config.soundOff,
             倍速=config.limitSpeed,
@@ -434,7 +455,7 @@ def cli() -> int:
             return asyncio.run(
                 check_course(args.check_course, config, logger, COOKIE_PATH)
             )
-        if not config.course_urls:
+        if not config.course_urls and (config.video_enabled or config.qa_enabled or config.homework_enabled):
             logger.error("未检测到有效网址或不支持此类网页,请检查配置文件!")
             return 2
         if not asyncio.run(main(config)):

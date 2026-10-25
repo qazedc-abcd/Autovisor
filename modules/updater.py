@@ -8,7 +8,7 @@ import requests
 
 from modules.version import __version__
 
-REPO = "CXRunfree/Autovisor"
+REPO = "qazedc-abcd/Autovisor"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASE_PAGE_URL = f"https://github.com/{REPO}/releases/latest"
 REQUEST_TIMEOUT = 5

@@ -9,6 +9,7 @@ import glob
 import requests
 from urllib.parse import urldefrag, urljoin
 from importlib import import_module
+from importlib.metadata import PackageNotFoundError, version as distribution_version
 from modules.progress import show_progress
 from modules.logger import Logger
 from modules.configs import Config
@@ -66,9 +67,8 @@ def is_compatible_wheel(filename, package, version, python_tag, abi_tag, platfor
     if not tags:
         return False
     wheel_version, wheel_python, wheel_abi, wheel_platform = tags
-    requested_version = normalize_version(package, version) if version else None
-    actual_version = normalize_version(package, wheel_version)
-    if (requested_version and actual_version != requested_version) or wheel_platform != platform_tag:
+    # wheel 的第四段是发行构建号，不能像 cv2.__version__ 那样截成三段。
+    if (version and wheel_version != version) or wheel_platform != platform_tag:
         return False
     # 精确匹配 python/abi 标签: 子串匹配会把 cp313t(自由线程) 误当成 cp313。
     python_ok = wheel_python == python_tag or "py3" in wheel_python
@@ -250,6 +250,14 @@ def download_wheel(mirror_name, base_url, package_name, version=None, config_obj
 
 def is_installed(package, version):
     try:
+        installed_distribution = distribution_version(package)
+    except PackageNotFoundError:
+        installed_distribution = None
+    if installed_distribution and installed_distribution != version:
+        # 先看元数据，避免导入错误构建后在 Windows 中锁住 cv2.pyd。
+        logger.warn(f"检测到 {package}-{installed_distribution}，目标为 {version}，将重新安装。")
+        return None, False
+    try:
         # 尝试导入 package
         module = import_module(mapping[package])
         installed_version = getattr(module, "__version__", None)
@@ -259,8 +267,12 @@ def is_installed(package, version):
             return None, False
         logger.info(f"{package}-{version} 已安装！")
         return module, True
-    except ImportError:
-        return None, False
+    except ImportError as error:
+        if installed_distribution is None:
+            return None, False
+        raise RuntimeError(
+            f"{package}-{version} 导入失败，请退出当前程序后修复依赖，避免覆盖已加载的 DLL。"
+        ) from error
 
 
 def install_package(package, version, mirrors, config_obj=config):
@@ -287,6 +299,14 @@ def install_package(package, version, mirrors, config_obj=config):
                 模块版本=getattr(module, "__version__", "未知"),
             )
             return module
+        except ImportError as error:
+            raise RuntimeError(
+                f"{package}-{version} 安装后导入失败；请退出当前程序后检查依赖兼容性，不在已加载 DLL 的进程中继续重装。"
+            ) from error
+        except PermissionError as error:
+            raise RuntimeError(
+                f"{package} 的依赖文件被占用或无写入权限；请先关闭旧的 Autovisor 进程后重新运行，不需要反复更换镜像。"
+            ) from error
         except Exception as e:
             logger.error(f"{package}-{version} 使用 {mirror_name} 镜像源失败，将尝试下一个镜像源：{e}")
             logger.event(

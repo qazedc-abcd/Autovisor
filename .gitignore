@@ -4,7 +4,6 @@ packages/*
 data/*
 resources/*
 !data/mirrors.json
-!resources/QRcode.jpg
 !resources/stealth.min.js
 !resources/zhs.ico
 !resources/markdown/
@@ -20,3 +19,5 @@ captcha/
 logs/
 ./preview/*
 *.egg-info/
+*.spec
+HANDOFF_PROMPT.md

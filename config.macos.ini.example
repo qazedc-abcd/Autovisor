@@ -15,7 +15,6 @@ cdpUrl = http://127.0.0.1:9222
 ;自动滑块只支持登录页，课中安全验证仍需手动完成
 enableAutoCaptcha = False
 enableHideWindow = False
-showDonateCode = False
 
 [course-option]
 ;限制每门课程运行时长/min (不限制:0)
@@ -29,3 +28,33 @@ URL2 =
 URL3 =
 URL4 =
 URLn =
+
+[ai]
+;OpenAI 兼容地址；可包含 /v1，程序追加 /chat/completions
+base_url = https://api.deepseek.com
+api_key =
+model = deepseek-flash
+;请求超时秒数，以及失败后的最大重试次数（不重试网站发布/提交）
+timeout = 60
+max_retries = 2
+
+[video]
+;刷课、互动、作业各自独立，可只打开其中一项
+enabled = True
+
+[qa]
+;开启后先检查实际互动分，满分跳过；得分不明时不发布
+enabled = False
+;每课每次数量，同时作为当天上限；0 关闭对应能力
+questions_per_run = 1
+answers_per_run = 1
+
+[homework]
+;仅做明确标记为“作业”的未提交项目，永远排除考试
+enabled = False
+
+[mirrors]
+Huawei = https://mirrors.huaweicloud.com/repository/pypi
+Aliyun = https://mirrors.aliyun.com/pypi
+Tsinghua = https://pypi.tuna.tsinghua.edu.cn
+Official = https://pypi.org
