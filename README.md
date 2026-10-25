@@ -1,8 +1,10 @@
 # Autovisor 课程助手
 
-一个可以直接打开使用的 Windows 桌面软件，支持智慧树课程的**视频学习、课程互动和作业答题**。
+二改自 [CXRunfree/Autovisor](https://github.com/CXRunfree/Autovisor) ，并同时遵从MIT协议。
 
-界面采用 Material Design 3 风格：浅色背景、绿色主色、大圆角卡片与胶囊按钮。**不包含赞赏码，不处理正式考试。**
+一个可以直接打开使用的 Windows 桌面软件，支持智慧树（知到）课程的**视频学习、课程互动和作业答题**。
+
+界面采用 Material Design 3 风格。**不处理正式考试，~~因为我现在没有实际使用场景。~~**
 
 ![软件主界面](docs/images/desktop.png)
 
@@ -46,6 +48,8 @@
 ### 4. 按需填写 AI 密钥
 
 如果开启互动或作业，请到“AI 设置”填写从 AI 服务商获得的 API 密钥。软件没有附赠或共享密钥。
+
+建议使用DeepSeek的api，够聪明，够便宜，在这里注册并获取api密钥[DeepSeek开放平台](https://platform.deepseek.com)
 
 |设置|默认值|
 |---|---|
@@ -104,7 +108,7 @@ data 保存登录状态，.autovisor 保存互动记录和答案缓存，logs �
 
 ### 怎么反馈问题？
 
-点击“运行记录 → 打开日志文件夹”，找到最近的日志。发给别人前删除账号、密钥和私密课程信息，并说明选择了哪些功能、在哪一步停止。
+点击“运行记录 → 打开日志文件夹”，找到最近的日志。发给别人前删除账号、密钥和私密课程信息，并说明选择了哪些功能、在哪一步停止。并上传到[Issues](https://github.com/qazedc-abcd/Autovisor/issues)中
 
 ## 开发者入口
 
