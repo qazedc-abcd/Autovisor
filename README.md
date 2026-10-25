@@ -2,6 +2,8 @@
 
 二改自 [CXRunfree/Autovisor](https://github.com/CXRunfree/Autovisor) ，并同时遵从MIT协议。
 
+增加了刷互动分与答题功能，因此**需要接入AI。**
+
 一个可以直接打开使用的 Windows 桌面软件，支持智慧树（知到）课程的**视频学习、课程互动和作业答题**。
 
 界面采用 Material Design 3 风格。**不处理正式考试，~~因为我现在没有实际使用场景。~~**
